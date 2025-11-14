@@ -4,7 +4,7 @@ pipeline {
     environment {
         // Docker configuration
         DOCKER_REGISTRY = 'docker.io'
-        DOCKER_REPO = 'your-dockerhub-username/url-shortener'
+        DOCKER_REPO = 'rogkhaled/rogkhaled-url-shortener'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         IMAGE_NAME = "${DOCKER_REPO}:${IMAGE_TAG}"
         IMAGE_LATEST = "${DOCKER_REPO}:latest"
