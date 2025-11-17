@@ -140,7 +140,7 @@ pipeline {
             }
         }
         
-        stage('Deploy to Kubernetes') {
+        /*stage('Deploy to Kubernetes') {
             steps {
                 echo "=== Stage: Deploy to Kubernetes ==="
                 script {
@@ -175,7 +175,7 @@ pipeline {
                     """
                 }
             }
-        }
+        }*/
         
         stage('Healthcheck') {
             steps {
