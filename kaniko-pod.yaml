@@ -5,25 +5,25 @@ metadata:
   namespace: jenkins
 spec:
   containers:
-    - name: kaniko
-      image: gcr.io/kaniko-project/executor:latest
-      args:
-        - "--dockerfile=/workspace/Dockerfile"
-        - "--destination=YOUR_DOCKER_HUB_USERNAME/YOUR_IMAGE:latest"
-        - "--context=/workspace"
-        - "--insecure" # optional, if using HTTP registry
-      volumeMounts:
-        - name: workspace-volume
-          mountPath: /workspace
-    - name: jnlp
-      image: jenkins/inbound-agent:latest
-      env:
-        - name: JENKINS_URL
-          value: "http://jenkins.jenkins.svc.cluster.local:8080/"
-      volumeMounts:
-        - name: workspace-volume
-          mountPath: /home/jenkins/agent
-  restartPolicy: Never
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:latest
+    args:
+      - "--context=/workspace"
+      - "--dockerfile=/workspace/Dockerfile"
+      - "--destination=YOUR_DOCKER_HUB_USERNAME/url-shortener:latest"
+      - "--cache=true"
+    volumeMounts:
+      - name: workspace-volume
+        mountPath: /workspace
+  - name: jnlp
+    image: jenkins/inbound-agent:latest
+    env:
+      - name: JENKINS_URL
+        value: "http://jenkins.jenkins.svc.cluster.local:8080/"
+    volumeMounts:
+      - name: workspace-volume
+        mountPath: /workspace
   volumes:
     - name: workspace-volume
       emptyDir: {}
+  restartPolicy: Never
