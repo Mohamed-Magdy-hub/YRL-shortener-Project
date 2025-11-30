@@ -2,34 +2,38 @@ pipeline {
     agent {
         kubernetes {
             label 'kaniko-agent'
+            defaultContainer 'jnlp'
             yaml """
 apiVersion: v1
 kind: Pod
 metadata:
   labels:
-    app: kaniko-agent
+    some-label: kaniko-agent
 spec:
   containers:
   - name: kaniko
     image: gcr.io/kaniko-project/executor:latest
     command:
-    - cat
+      - /busybox/sh
+    args:
+      - -c
+      - "sleep 99d"
     tty: true
     volumeMounts:
-    - name: kaniko-secret
-      mountPath: /kaniko/.docker
-  restartPolicy: Never
+      - name: docker-config
+        mountPath: /kaniko/.docker
+  - name: jnlp
+    image: jenkins/inbound-agent:latest
   volumes:
-  - name: kaniko-secret
-    secret:
-      secretName: dockerhub-credentials
+    - name: docker-config
+      secret:
+        secretName: dockerhub-credentials
 """
         }
     }
 
     environment {
-        DOCKER_IMAGE = "makenmohamed/yrl-shortener-project" // replace with your Docker Hub repo
-        DOCKER_TAG = "latest"
+        IMAGE = "makenmohamed/url-shortener:latest"
     }
 
     stages {
@@ -43,11 +47,11 @@ spec:
             steps {
                 container('kaniko') {
                     sh """
-                    /kaniko/executor \
-                      --dockerfile=Dockerfile \
-                      --context=./ \
-                      --destination=${DOCKER_IMAGE}:${DOCKER_TAG} \
-                      --cleanup
+                      /kaniko/executor \
+                        --dockerfile=Dockerfile \
+                        --context=\$WORKSPACE \
+                        --destination=${IMAGE} \
+                        --skip-tls-verify
                     """
                 }
             }
@@ -55,14 +59,11 @@ spec:
     }
 
     post {
-        always {
-            echo "Pipeline finished!"
-        }
         success {
-            echo "Docker image pushed successfully!"
+            echo "✅ Docker image built and pushed: ${IMAGE}"
         }
         failure {
-            echo "Pipeline failed."
+            echo "❌ Pipeline failed"
         }
     }
 }
