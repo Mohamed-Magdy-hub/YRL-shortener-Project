@@ -1,23 +1,16 @@
 pipeline {
     agent {
         kubernetes {
-            label 'kaniko-agent'
-            defaultContainer 'jnlp'
             yaml """
 apiVersion: v1
 kind: Pod
 metadata:
   labels:
-    some-label: kaniko-agent
+    app: kaniko-agent
 spec:
   containers:
   - name: kaniko
     image: gcr.io/kaniko-project/executor:latest
-    command:
-      - /busybox/sh
-    args:
-      - -c
-      - "sleep 99d"
     tty: true
     volumeMounts:
       - name: docker-config
@@ -31,39 +24,53 @@ spec:
 """
         }
     }
-
     environment {
-        IMAGE = "makenmohamed/url-shortener:latest"
+        DOCKER_REGISTRY = "docker.io"
+        DOCKER_REPO = "makenmohamed/url-shortener"
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
     }
-
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/Mohamed-Magdy-hub/YRL-shortener-Project.git'
+                checkout scm
             }
         }
-
-        stage('Build & Push Docker Image') {
+        stage('Build Docker Image') {
             steps {
                 container('kaniko') {
                     sh """
-                      /kaniko/executor \
-                        --dockerfile=Dockerfile \
-                        --context=\$WORKSPACE \
-                        --destination=${IMAGE} \
-                        --skip-tls-verify
+                    /kaniko/executor \
+                      --dockerfile=Dockerfile \
+                      --context=\$WORKSPACE \
+                      --destination=\$DOCKER_REGISTRY/\$DOCKER_REPO:\$IMAGE_TAG \
+                      --verbosity=info
+                    """
+                }
+            }
+        }
+        stage('Push Latest Tag') {
+            steps {
+                container('kaniko') {
+                    sh """
+                    /kaniko/executor \
+                      --dockerfile=Dockerfile \
+                      --context=\$WORKSPACE \
+                      --destination=\$DOCKER_REGISTRY/\$DOCKER_REPO:latest \
+                      --verbosity=info
                     """
                 }
             }
         }
     }
-
     post {
+        always {
+            echo "Pipeline finished."
+        }
         success {
-            echo "✅ Docker image built and pushed: ${IMAGE}"
+            echo "Docker image built and pushed successfully!"
         }
         failure {
-            echo "❌ Pipeline failed"
+            echo "Pipeline failed."
         }
     }
 }
