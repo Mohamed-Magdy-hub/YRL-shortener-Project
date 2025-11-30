@@ -1,47 +1,42 @@
 pipeline {
     agent {
         kubernetes {
-            label 'kaniko-agent'
-            defaultContainer 'jnlp'
-            yamlFile 'kaniko-pod.yaml' // path to your static pod YAML
+            yamlFile 'kaniko-pod.yaml'
         }
     }
-
     environment {
-        DOCKER_REGISTRY = 'docker.io/makenmohamed' // your Docker Hub username
-        DOCKER_REPO     = 'yrl-shortener'          // your repo name
-        IMAGE_TAG       = "${env.BUILD_NUMBER}"
+        DOCKER_HUB_REPO = "YOUR_DOCKER_HUB_USERNAME/url-shortener"
+        DOCKER_HUB_CREDENTIALS = "dockerhub-credentials"
     }
-
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/Mohamed-Magdy-hub/YRL-shortener-Project.git',
-                    credentialsId: 'dockerhub-credentials'
+                echo 'Cloning repository...'
+                checkout scm
             }
         }
 
         stage('Build & Push Docker Image') {
             steps {
                 container('kaniko') {
-                    echo "Building Docker image with Kaniko..."
+                    echo 'Building Docker image with Kaniko...'
                     sh """
                     /kaniko/executor \
-                      --dockerfile=\$WORKSPACE/Dockerfile \
-                      --context=\$WORKSPACE \
-                      --destination=\$DOCKER_REGISTRY/\$DOCKER_REPO:\$IMAGE_TAG \
-                      --destination=\$DOCKER_REGISTRY/\$DOCKER_REPO:latest \
-                      --insecure
+                        --dockerfile=/workspace/Dockerfile \
+                        --destination=${DOCKER_HUB_REPO}:latest \
+                        --context=/workspace \
+                        --cache=true
                     """
                 }
             }
         }
     }
-
     post {
-        always {
-            echo "Pipeline finished"
+        success {
+            echo 'Pipeline finished successfully!'
+        }
+        failure {
+            echo 'Pipeline failed. Check logs!'
         }
     }
 }
