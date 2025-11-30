@@ -2,53 +2,56 @@ pipeline {
     agent {
         kubernetes {
             label 'url-shortener-pipeline'
-            defaultContainer 'jnlp'
+            defaultContainer 'docker'
             yaml """
 apiVersion: v1
 kind: Pod
 spec:
   containers:
-  - name: jnlp
-    image: jenkins/inbound-agent:latest
-    resources:
-      requests:
-        memory: "256Mi"
-        cpu: "100m"
   - name: docker
     image: docker:24.0.2-dind
     securityContext:
       privileged: true
     volumeMounts:
-      - mountPath: /var/lib/docker
-        name: docker-graph-storage
-  - name: kubectl
-    image: bitnami/kubectl:latest
+    - name: docker-graph-storage
+      mountPath: /var/lib/docker
+    - name: workspace-volume
+      mountPath: /home/jenkins/agent
+  - name: jnlp
+    image: jenkins/inbound-agent:latest
+    volumeMounts:
+    - name: docker-graph-storage
+      mountPath: /var/lib/docker
+    - name: workspace-volume
+      mountPath: /home/jenkins/agent
   volumes:
-  - emptyDir: {}
-    name: docker-graph-storage
+  - name: docker-graph-storage
+    emptyDir: {}
+  - name: workspace-volume
+    emptyDir: {}
 """
         }
     }
 
     environment {
         DOCKER_USER = 'makenmohamed'
-        DOCKER_PASS = credentials('dockerhub-credentials')
-        IMAGE_NAME = 'makenmohamed/url-shortener:latest'
+        DOCKER_PASS = credentials('dockerhub-credentials') // Jenkins stored password
+        KUBECONFIG = '/home/jenkins/.kube/config'          // mount or set kubeconfig
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                git url: 'https://github.com/Mohamed-Magdy-hub/YRL-shortener-Project.git', branch: 'main'
+                container('docker') {
+                    checkout scm
+                }
             }
         }
 
         stage('Build Docker Image') {
             steps {
                 container('docker') {
-                    sh """
-                    docker build -t $IMAGE_NAME .
-                    """
+                    sh 'docker build -t $DOCKER_USER/url-shortener:latest .'
                 }
             }
         }
@@ -56,73 +59,36 @@ spec:
         stage('Push Docker Image') {
             steps {
                 container('docker') {
-                    sh """
+                    sh '''
                     echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-                    docker push $IMAGE_NAME
-                    """
+                    docker push $DOCKER_USER/url-shortener:latest
+                    '''
                 }
             }
         }
 
         stage('Deploy to EKS') {
             steps {
-                container('kubectl') {
-                    sh """
-                    cat <<EOF > deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: url-shortener
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: url-shortener
-  template:
-    metadata:
-      labels:
-        app: url-shortener
-    spec:
-      nodeSelector:
-        type: app
-      containers:
-      - name: url-shortener
-        image: $IMAGE_NAME
-        ports:
-        - containerPort: 3000
-EOF
+                container('docker') {
+                    sh '''
+                    # Install kubectl in container
+                    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                    chmod +x kubectl
+                    mv kubectl /usr/local/bin/
 
-                    cat <<EOF > service.yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: url-shortener-service
-spec:
-  type: LoadBalancer
-  selector:
-    app: url-shortener
-  ports:
-    - port: 80
-      targetPort: 3000
-EOF
+                    # Deploy app
+                    kubectl apply -f k8s/deployment.yaml
+                    kubectl apply -f k8s/service.yaml
 
-                    kubectl apply -f deployment.yaml
-                    kubectl apply -f service.yaml
+                    # Wait for pod ready
                     kubectl wait --for=condition=ready pod -l app=url-shortener --timeout=120s
+
+                    # Show status
                     kubectl get pods -o wide
                     kubectl get svc url-shortener-service
-                    """
+                    '''
                 }
             }
-        }
-    }
-
-    post {
-        success {
-            echo "Pipeline finished successfully! Check the LoadBalancer IP for your app."
-        }
-        failure {
-            echo "Pipeline failed! Check logs for errors."
         }
     }
 }
