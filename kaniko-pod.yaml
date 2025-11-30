@@ -2,33 +2,28 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: kaniko-agent
-  labels:
-    jenkins/label: kaniko-agent
+  namespace: jenkins
 spec:
   containers:
-  - name: jnlp
-    image: jenkins/inbound-agent:latest
-    args: ['$(JENKINS_SECRET)', '$(JENKINS_NAME)']
-    env:
-      - name: JENKINS_URL
-        value: "http://jenkins.jenkins.svc.cluster.local:8080/"
-    resources:
-      requests:
-        memory: "256Mi"
-        cpu: "100m"
-
-  - name: kaniko
-    image: gcr.io/kaniko-project/executor:latest
-    command:
-      - /busybox/sh
-      - -c
-      - "sleep infinity"
-    volumeMounts:
-      - name: kaniko-secret
-        mountPath: /kaniko/.docker
-
+    - name: kaniko
+      image: gcr.io/kaniko-project/executor:latest
+      args:
+        - "--dockerfile=/workspace/Dockerfile"
+        - "--destination=YOUR_DOCKER_HUB_USERNAME/YOUR_IMAGE:latest"
+        - "--context=/workspace"
+        - "--insecure" # optional, if using HTTP registry
+      volumeMounts:
+        - name: workspace-volume
+          mountPath: /workspace
+    - name: jnlp
+      image: jenkins/inbound-agent:latest
+      env:
+        - name: JENKINS_URL
+          value: "http://jenkins.jenkins.svc.cluster.local:8080/"
+      volumeMounts:
+        - name: workspace-volume
+          mountPath: /home/jenkins/agent
   restartPolicy: Never
   volumes:
-    - name: kaniko-secret
-      secret:
-        secretName: dockerhub-credentials
+    - name: workspace-volume
+      emptyDir: {}
