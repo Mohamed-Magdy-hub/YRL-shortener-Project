@@ -1,42 +1,32 @@
 pipeline {
     agent {
         kubernetes {
-            yamlFile 'kaniko-pod.yaml'
+            yamlFile 'jenkins-dind-pod.yaml'
+            defaultContainer 'docker'
         }
     }
     environment {
-        DOCKER_USERNAME = credentials('dockerhub-username') 
-        DOCKER_PASSWORD = credentials('dockerhub-password') 
+        DOCKER_IMAGE = "makenmohamed/url-shortener:latest"
     }
     stages {
         stage('Checkout') {
             steps {
-                checkout scm
+                git url: 'https://github.com/Mohamed-Magdy-hub/YRL-shortener-Project.git', branch: 'main'
             }
         }
-        stage('Build & Push Docker Image') {
+        stage('Build Docker Image') {
             steps {
-                script {
-                    if (fileExists('Dockerfile')) {
-                        container('kaniko') {
-                            sh """
-                            /kaniko/executor \
-                              --dockerfile=/workspace/Dockerfile \
-                              --context=/workspace \
-                              --destination=$DOCKER_USERNAME/url-shortener:latest \
-                              --cache=true
-                            """
-                        }
-                    } else {
-                        echo "Dockerfile not found. Skipping Kaniko build."
-                    }
+                sh 'docker version'
+                sh 'docker build -t $DOCKER_IMAGE .'
+            }
+        }
+        stage('Push Docker Image') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
+                    sh 'docker push $DOCKER_IMAGE'
                 }
             }
-        }
-    }
-    post {
-        always {
-            echo 'Pipeline finished'
         }
     }
 }
