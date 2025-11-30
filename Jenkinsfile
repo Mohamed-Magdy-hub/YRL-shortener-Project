@@ -6,7 +6,7 @@ pipeline {
         }
     }
     environment {
-        DOCKER_IMAGE = "yourdockerhubuser/url-shortener:latest"
+        DOCKER_IMAGE = "makenmohamed/url-shortener:latest"
         KUBE_NAMESPACE = "default"
         DEPLOYMENT_NAME = "url-shortener"
     }
