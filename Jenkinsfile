@@ -1,60 +1,30 @@
 pipeline {
     agent {
         kubernetes {
-            yaml """
-apiVersion: v1
-kind: Pod
-metadata:
-  labels:
-    app: kaniko-agent
-spec:
-  containers:
-  - name: kaniko
-    image: gcr.io/kaniko-project/executor:latest
-    tty: true
-    volumeMounts:
-      - name: docker-config
-        mountPath: /kaniko/.docker
-  - name: jnlp
-    image: jenkins/inbound-agent:latest
-  volumes:
-    - name: docker-config
-      secret:
-        secretName: dockerhub-credentials
-"""
+            label 'kaniko-agent' // must match the label in your kaniko-pod.yaml
         }
     }
     environment {
         DOCKER_REGISTRY = "docker.io"
-        DOCKER_REPO = "makenmohamed/url-shortener"
-        IMAGE_TAG = "${env.BUILD_NUMBER}"
+        DOCKER_REPO     = "makenmohamed/YRL-shortener-Project"
+        IMAGE_TAG       = "${env.BUILD_NUMBER}"
     }
     stages {
         stage('Checkout') {
             steps {
+                echo "Cloning repository..."
                 checkout scm
             }
         }
-        stage('Build Docker Image') {
+        stage('Build & Push Docker Image') {
             steps {
                 container('kaniko') {
+                    echo "Building Docker image with Kaniko..."
                     sh """
                     /kaniko/executor \
-                      --dockerfile=Dockerfile \
+                      --dockerfile=\$WORKSPACE/Dockerfile \
                       --context=\$WORKSPACE \
                       --destination=\$DOCKER_REGISTRY/\$DOCKER_REPO:\$IMAGE_TAG \
-                      --verbosity=info
-                    """
-                }
-            }
-        }
-        stage('Push Latest Tag') {
-            steps {
-                container('kaniko') {
-                    sh """
-                    /kaniko/executor \
-                      --dockerfile=Dockerfile \
-                      --context=\$WORKSPACE \
                       --destination=\$DOCKER_REGISTRY/\$DOCKER_REPO:latest \
                       --verbosity=info
                     """
@@ -67,10 +37,10 @@ spec:
             echo "Pipeline finished."
         }
         success {
-            echo "Docker image built and pushed successfully!"
+            echo "Docker image successfully built and pushed!"
         }
         failure {
-            echo "Pipeline failed."
+            echo "Pipeline failed. Check logs."
         }
     }
 }
