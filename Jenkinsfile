@@ -2,7 +2,7 @@ pipeline {
     agent {
         kubernetes {
             label 'url-shortener-pipeline'
-            defaultContainer 'jnlp'
+            defaultContainer 'docker'
             yaml """
 apiVersion: v1
 kind: Pod
@@ -16,19 +16,12 @@ spec:
     - name: docker-graph-storage
       mountPath: /var/lib/docker
   - name: kubectl
-    image: bitnami/kubectl:1.28.6
+    image: lachlanevenson/k8s-kubectl:v1.28.0
     command:
     - cat
     tty: true
   - name: jnlp
     image: jenkins/inbound-agent:latest
-    env:
-    - name: JENKINS_SECRET
-      value: "\${JENKINS_SECRET}"
-    - name: JENKINS_TUNNEL
-      value: "\${JENKINS_TUNNEL}"
-    - name: JENKINS_AGENT_NAME
-      value: "\${JENKINS_AGENT_NAME}"
   volumes:
   - name: docker-graph-storage
     emptyDir: {}
@@ -37,16 +30,18 @@ spec:
     }
 
     environment {
-        IMAGE_NAME = "makenmohamed/url-shortener"
-        IMAGE_TAG = "latest"
+        DOCKER_CREDENTIALS_ID = 'dockerhub-credentials'
+        IMAGE_NAME = 'makenmohamed/url-shortener:latest'
     }
 
     stages {
         stage('Checkout SCM') {
             steps {
                 checkout([$class: 'GitSCM',
-                    branches: [[name: '*/main']],
-                    userRemoteConfigs: [[url: 'https://github.com/Mohamed-Magdy-hub/YRL-shortener-Project.git', credentialsId: 'dockerhub-credentials']]
+                    branches: [[name: 'main']],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/Mohamed-Magdy-hub/YRL-shortener-Project.git'
+                    ]]
                 ])
             }
         }
@@ -55,7 +50,7 @@ spec:
             steps {
                 container('docker') {
                     sh """
-                        docker build -t \$IMAGE_NAME:\$IMAGE_TAG .
+                        docker build -t $IMAGE_NAME .
                     """
                 }
             }
@@ -64,10 +59,12 @@ spec:
         stage('Push Docker Image') {
             steps {
                 container('docker') {
-                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    withCredentials([usernamePassword(credentialsId: env.DOCKER_CREDENTIALS_ID,
+                                                     usernameVariable: 'DOCKER_USER',
+                                                     passwordVariable: 'DOCKER_PASS')]) {
                         sh """
                             echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
-                            docker push \$IMAGE_NAME:\$IMAGE_TAG
+                            docker push $IMAGE_NAME
                         """
                     }
                 }
@@ -77,12 +74,10 @@ spec:
         stage('Deploy to EKS') {
             steps {
                 container('kubectl') {
-                    withKubeConfig([credentialsId: 'eks-kubeconfig']) {
-                        sh """
-                            kubectl apply -f k8s/deployment.yaml
-                            kubectl rollout status deployment/url-shortener
-                        """
-                    }
+                    sh """
+                        # Example deployment command
+                        kubectl apply -f k8s/deployment.yaml
+                    """
                 }
             }
         }
@@ -90,13 +85,10 @@ spec:
 
     post {
         always {
-            echo 'Pipeline finished.'
-        }
-        success {
-            echo 'Deployment succeeded!'
+            echo "Pipeline finished."
         }
         failure {
-            echo 'Pipeline failed!'
+            echo "Pipeline failed!"
         }
     }
 }
